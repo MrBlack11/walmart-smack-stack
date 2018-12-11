@@ -3,8 +3,6 @@ package actors;
 import java.util.List;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.AbstractJavaRDDLike;
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
@@ -12,67 +10,42 @@ import com.datastax.spark.connector.japi.*;
 
 import akka.actor.AbstractActor;
 import akka.actor.Props;
-import akka.event.Logging;
 import model.Product;
 import model.ProductComparator;
 import model.ResultSearch;
 import model.SearchParam;
 
-import akka.event.LoggingAdapter;
-
 import static com.datastax.spark.connector.japi.CassandraJavaUtil.*;
 
 public class SearchActor extends AbstractActor {
 	private JavaSparkContext context;
-	private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+	private SparkConf conf;
 
 	public static Props getPros() {
-		return Props.create(SearchActor.class);
+		return Props.create(SearchActor.class, SearchActor::new);
 	}
 
 	@Override
 	public void preStart() throws Exception {
-		try {
-			SparkConf conf = new SparkConf().setAppName("teste").setMaster("local");
-			context = new JavaSparkContext(conf);
-		} catch (NullPointerException e) {
-			log.info("Ocorreu uma exceção do tipo NullPointer: " + e.getMessage());
-		}
+		conf = new SparkConf().setAppName("walmart").setMaster("local");
+		context = new JavaSparkContext(conf);
 	}
 
 	@Override
 	public void postStop() throws Exception {
-		try {
+		if (context != null) {
 			context.close();
-		} catch (NullPointerException e) {
-			log.info("Recurso já foi desalocado" + e.getMessage());
 		}
-		
 	}
 
 	@Override
 	public Receive createReceive() {
-		return receiveBuilder().match(String.class, s -> {
-			String all = (String) s;
-			getSender().tell(selectUsers(), getSelf());
+		return receiveBuilder().match(Exception.class, ex -> {
+			throw ex;
 		}).match(SearchParam.class, sp -> {
 			SearchParam searchParam = (SearchParam) sp;
-			getSender().tell(searchProducts(searchParam), getSelf());
+			sender().tell(searchProducts(searchParam), self());
 		}).build();
-	}
-
-	private String selectUsers() {
-		JavaRDD<String> cassadraRdd = CassandraJavaUtil.javaFunctions(context)
-				.cassandraTable("teste", "users", mapColumnTo(String.class)).select("fname");
-		List<String> results = cassadraRdd.collect();
-
-		StringBuilder sb = new StringBuilder();
-		for (String str : results) {
-			sb.append(str);
-			sb.append("\n");
-		}
-
-		return sb.toString();
 	}
 
 	/**
@@ -82,23 +55,26 @@ public class SearchActor extends AbstractActor {
 	 * @return product list
 	 */
 	private ResultSearch searchProducts(SearchParam sp) {
+		long startSearch = System.currentTimeMillis();
 		JavaRDD<Product> cassadraRdd = CassandraJavaUtil.javaFunctions(context)
 				.cassandraTable("teste", "product", mapRowTo(Product.class))
-				.select("id", "name", "price", "quantity", "type").repartition(context.defaultParallelism());
+				.select("id", "name", "price", "quantity", "type");
 
-		List<Product> resultRdd = cassadraRdd.filter(p -> p.getName().equals(sp.getProductName())).takeOrdered(1, new ProductComparator());
-//		Product resultRdd = cassadraRdd.filter(p -> p.getName().equals(sp.getProductName())).min(new ProductComparator());
-		
-		for(Product p : resultRdd) {
-			System.out.println(p.getName());
-			System.out.println(p.getPrice());
-		}
-			
-		ResultSearch rs = new ResultSearch(resultRdd);
+		long end = System.currentTimeMillis() - startSearch;
+		System.out.println("Tempo de busca: " + end + "ms");
 
-		rs.setRequestActor(sp.getRequestActor());
+		long startfilter = System.currentTimeMillis();
+		List<Product> resultRdd = cassadraRdd.filter(p -> p.getName().contains(sp.getProductName())).takeOrdered(10,
+				new ProductComparator());
+
+		long endFilter = System.currentTimeMillis() - startfilter;
+		System.out.println("Tempo de filtragem: " + endFilter + "ms");
+
+		ResultSearch rs = new ResultSearch();
+		rs.setResultProducts(resultRdd);
 		rs.setMasterActor(sp.getMasterActor());
-
+		rs.setRequestActor(sp.getRequestActor());
+		
 		return rs;
 	}
 }

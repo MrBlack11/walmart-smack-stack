@@ -5,16 +5,8 @@
 # An example controller showing a sample home page
 GET   /                           controllers.HomeController.index
 
-# WordCount
-GET   /wordcount                  controllers.HomeController.wordcount
-
-# Teste busca banco de dados
-# GET   /users                      controllers.HomeController.search
-
-GET   /search/:name           controllers.HomeController.search(name: String)
-
-# Teste inserção no banco de dados
-GET   /insert/:id/:fname/:lname   controllers.HomeController.insert(id: Int, fname: String, lname: String)
+# Busca de produtos no banco de dados
+GET   /search/:name               controllers.HomeController.search(name: String)
 		
 # Map static resources from the /public folder to the /assets URL path
 GET   /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)

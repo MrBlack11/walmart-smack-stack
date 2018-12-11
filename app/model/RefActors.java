@@ -3,13 +3,14 @@ package model;
 import akka.actor.ActorRef;
 
 public class RefActors {
+
 	private ActorRef masterActor;
 	private ActorRef requestActor;
-	
+
 	public RefActors() {
-		
+
 	}
-	
+
 	public ActorRef getMasterActor() {
 		return masterActor;
 	}

@@ -1,6 +1,10 @@
 package model;
 
-public class SearchParam extends RefActors {
+import java.io.Serializable;
+
+public class SearchParam extends RefActors implements Serializable {
+	private static final long serialVersionUID = 1L;
+
 	private String productName;
 	private String category;
 	private Double minPrice;
